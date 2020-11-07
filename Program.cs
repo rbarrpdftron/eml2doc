@@ -104,27 +104,39 @@ namespace PDFTronEML2DOC
             List<byte> subjectBuffer = new List<byte>();
 
             // TODO does not handle where Subject: is first line of file
-
+            string originalSubject = "";
+            int lastPos = -1;
             int indexOfSubject = IndexOf(subjectPattern, emlData, 0);
-            int lastPos = indexOfSubject + subjectPattern.Length;
-            int nextLine = IndexOf(nextLinePattern, emlData, lastPos);
-            while (nextLine > 0)
+            if(indexOfSubject >= 0)
             {
-                for (int i = lastPos; i < nextLine; ++i)
+                lastPos = indexOfSubject + subjectPattern.Length;
+                int nextLine = IndexOf(nextLinePattern, emlData, lastPos);
+                while (nextLine > 0)
                 {
-                    subjectBuffer.Add(emlData[i]);
+                    for (int i = lastPos; i < nextLine; ++i)
+                    {
+                        subjectBuffer.Add(emlData[i]);
+                    }
+                    lastPos = nextLine + 2;
+                    if (!IsLWSP(emlData, lastPos)) break;
+
+                    nextLine = IndexOf(nextLinePattern, emlData, lastPos);
                 }
-                lastPos = nextLine + 2;
-                if (!IsLWSP(emlData, lastPos)) break;
-
-                nextLine = IndexOf(nextLinePattern, emlData, lastPos);
+                originalSubject = System.Text.Encoding.UTF8.GetString(subjectBuffer.ToArray());
             }
-            var originalSubject = System.Text.Encoding.UTF8.GetString(subjectBuffer.ToArray());
-
             using (var stream = new FileStream(tempPath, FileMode.Create))
             {
-                // write data from start to end of Subject header
-                stream.Write(emlData, 0, indexOfSubject + subjectPattern.Length);
+                if(indexOfSubject >= 0)
+                {
+                    // write data from start to end of Subject header
+                    stream.Write(emlData, 0, indexOfSubject + subjectPattern.Length);
+                }
+                else
+                {
+                    // inject subject to begining of stream
+                    stream.Write(subjectPattern, 2, subjectPattern.Length - 2);
+                    lastPos = 0;
+                }
                 // write guide
                 stream.Write(guidBytes, 0, guidBytes.Length);
                 stream.WriteByte(0x0D);
@@ -176,7 +188,7 @@ namespace PDFTronEML2DOC
         {
             if(args.Length < 2)
             {
-                Console.WriteLine("usage: emlFile outputFolder");
+                Console.WriteLine("usage: emlFileInput docFileOutput");
             }
             string tempPath = System.IO.Path.GetTempPath();
             var guid = Guid.NewGuid();
